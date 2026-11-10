@@ -1,0 +1,52 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                echo '=== CHECKOUT : Recuperation du projet ==='
+                git url: 'https://github.com/ChaymaAmara957/mon-projet.git', branch: 'main'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                echo '=== BUILD : Construction du projet ==='
+
+                sh 'test -f jenkins.html'
+                sh 'test -f jenkins.css'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                echo '=== TEST : Verification du projet ==='
+
+                sh 'grep -q "<html" jenkins.html'
+                sh 'grep -q "<h1>" jenkins.html'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo '=== DEPLOY : Deploiement du projet ==='
+                bat 'echo Le projet est pret pour le deploiement'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'BUILD OK : Pipeline termine avec succes !'
+        }
+
+        failure {
+            echo 'BUILD KO : Une erreur est survenue !'
+        }
+    }
+}
