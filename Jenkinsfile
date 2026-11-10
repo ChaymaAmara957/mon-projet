@@ -28,7 +28,7 @@ pipeline {
         stage('Étape 3 : Simuler un déploiement local') {
             steps {
                 bat 'echo === Etape 3 : Simuler un deploiement local ==='
-                bat 'if exist tp2.html (echo Le fichier tp2.html est pret a etre affiche) else (echo tp2.html introuvable & exit /b 1)'
+                bat 'if exist index.html (echo Le fichier index.html est pret a etre affiche) else (echo index.html introuvable & exit /b 1)'
             }
         }
 
