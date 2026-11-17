@@ -1,50 +1,67 @@
 pipeline {
-    agent any
+  agent any
+  options { timestamps() }
 
-    options { timestamps() }
+  environment {
+    IMAGE = 'monapp'
+    TAG   = "build-${env.BUILD_NUMBER}"
+  }
 
-    stages {
-        stage('Cloner le dépôt') {
-            steps {
-                // Jenkins recupere le depot configure dans le job (Pipeline script from SCM)
-                checkout scm
-            }
-        }
-
-        stage('Étape 1 : Vérification du dépôt') {
-            steps {
-                bat 'echo === Etape 1 : Verification du depot ==='
-                bat 'git status'
-            }
-        }
-
-        stage('Étape 2 : Afficher le contenu du projet') {
-            steps {
-                bat 'echo === Etape 2 : Afficher le contenu du projet ==='
-                bat 'dir'
-            }
-        }
-
-        stage('Étape 3 : Simuler un déploiement local') {
-            steps {
-                bat 'echo === Etape 3 : Simuler un deploiement local ==='
-                bat 'if exist jenkins.html (echo Le fichier jenkins.html est pret a etre affiche) else (echo jenkins.html introuvable & exit /b 1)'
-            }
-        }
-
-        stage('Étape 4 : Fin du build') {
-            steps {
-                bat 'echo === Etape 4 : Fin du build ==='
-                bat 'echo SUCCESS'
-            }
-        }
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }   // lit le meme repo que le job
     }
 
-    post {
-        always {
-            archiveArtifacts artifacts: '*.html, *.css', allowEmptyArchive: true
-        }
-        success { echo 'Build OK' }
-        failure { echo 'Build KO' }
+    stage('Docker Build') {
+      steps {
+        bat 'docker version'
+        bat "docker build -t %IMAGE%:%TAG% ."
+      }
     }
+
+    stage('Smoke Test') {
+      steps {
+        bat """
+          docker rm -f monapp_test 2>nul || ver > nul
+          docker run -d --name monapp_test -p 8081:80 %IMAGE%:%TAG%
+          ping -n 3 127.0.0.1 > nul
+          curl -I http://localhost:8081 | find "200 OK"
+          docker rm -f monapp_test
+        """
+      }
+    }
+
+    stage('Push (Docker Hub)') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
+                                          usernameVariable: 'USER',
+                                          passwordVariable: 'PASS')]) {
+          bat """
+            echo %PASS%| docker login -u %USER% --password-stdin
+            docker tag %IMAGE%:%TAG% %USER%/%IMAGE%:%TAG%
+            docker tag %IMAGE%:%TAG% %USER%/%IMAGE%:latest
+            docker push %USER%/%IMAGE%:%TAG%
+            docker push %USER%/%IMAGE%:latest
+          """
+        }
+      }
+    }
+
+    stage('Deploy (Staging)') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
+                                          usernameVariable: 'DOCKERHUB_USER',
+                                          passwordVariable: 'DH_PASS')]) {
+          bat 'docker compose pull'
+          bat 'docker compose up -d'
+          bat 'docker ps'
+        }
+      }
+    }
+  }
+
+  post {
+    success { echo 'Build+Test+Push+Deploy OK - http://localhost:8082' }
+    failure { echo 'Build/Tests/Push KO' }
+  }
 }
